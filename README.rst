@@ -16,9 +16,18 @@ Introduction
     :target: https://github.com/astral-sh/ruff
     :alt: Code Style: Ruff
 
+.. warning::
+
+   **This project is abandoned.** CircuitPython's ``usb_hid`` module has
+   platform limitations that prevent it from working with NUT/Synology: the
+   ``send_report()`` API does not populate the buffers used by GET_REPORT, so
+   the host always reads zeros. There is no Python-level workaround. See
+   ``LESSONS_LEARNED.md`` for a full writeup and recommendations for a C/C++
+   rewrite using TinyUSB directly.
+
 CircuitPython library for emulating a USB HID Power Device (UPS / battery
 system). Makes any CircuitPython board appear as a UPS to the connected host
-(macOS, Linux/NUT, Synology DSM, Windows).
+(macOS only — see warning above).
 
 Inspired by the `HIDPowerDevice <https://github.com/abratchik/HIDPowerDevice>`_
 Arduino library by Alexander Bratchik.
@@ -26,39 +35,23 @@ Arduino library by Alexander Bratchik.
 
 Dependencies
 =============
-This driver depends on:
 
 * `Adafruit CircuitPython <https://github.com/adafruit/circuitpython>`_
-
-Please ensure all dependencies are available on the CircuitPython filesystem.
-This is easily achieved by downloading
-`the Adafruit library and driver bundle <https://circuitpython.org/libraries>`_
-or individual libraries can be installed using
-`circup <https://github.com/adafruit/circup>`_.
+  (no additional libraries required)
 
 
-Installing to a Connected CircuitPython Device with Circup
-==========================================================
+Installation
+============
 
-Make sure that you have ``circup`` installed in your Python environment.
-Install it with the following command if necessary:
+Copy the ``hid_power_device/`` directory to the ``lib/`` folder on your
+CircuitPython board.
 
-.. code-block:: shell
-
-    pip3 install circup
-
-With ``circup`` installed and your CircuitPython device connected use the
-following command to install:
+Or install with `circup <https://github.com/adafruit/circup>`_ (once published
+to PyPI):
 
 .. code-block:: shell
 
     circup install hid_power_device
-
-Or the following command to update an existing version:
-
-.. code-block:: shell
-
-    circup update
 
 
 Usage Example
@@ -77,14 +70,15 @@ The HID descriptor must be registered at boot time before the USB stack starts.
 
     usb_hid.enable((build_power_device(PresentStatus, RemainingCapacity),))
 
-**code.py** (main loop):
+**code.py** (main loop — pass the same report classes used in boot.py):
 
 .. code-block:: python
 
     import time
     from hid_power_device import HIDPowerDevice
+    from hid_power_device.reports import PresentStatus, RemainingCapacity
 
-    ups = HIDPowerDevice.find()
+    ups = HIDPowerDevice.find(PresentStatus, RemainingCapacity)
     ups.send()  # send defaults immediately to avoid zero-state bug
 
     while True:
@@ -106,23 +100,11 @@ CapacityMode
 
 - 0 = mAh (milliamp-hours)
 - 1 = mWh (milliwatt-hours)
-- 2 = % (percentage, the default)
+- 2 = % (percentage, recommended for this library's percentage-based reports)
 - 3 = Boolean
 
 Windows may require mode 1 (mWh) instead of 2 (%) when a native laptop battery
 is present, as it can conflict with the built-in battery driver.
-
-Linux udev rules
-----------------
-
-On Linux, UPower may not recognize the device without a udev rule. Create
-``/etc/udev/rules.d/99-circuitpython-ups.rules``:
-
-.. code-block:: text
-
-    SUBSYSTEM=="usb", ATTR{idVendor}=="239a", ENV{UPOWER_VENDOR}="CircuitPython"
-
-Replace ``239a`` with your board's USB vendor ID.
 
 Time values
 -----------
@@ -148,16 +130,14 @@ Known Limitations
 
 2. **GET_REPORT returns zeros for INPUT reports.** ``send_report()`` sends data
    via the interrupt endpoint but does not populate the ``in_report_buffers``
-   used by GET_REPORT (``shared-module/usb_hid/Device.c:255``). Real data
+   used by GET_REPORT (``tud_hid_get_report_cb`` in CircuitPython's
+   ``shared-module/usb_hid/Device.c``). Real data
    arrives via interrupt INPUT reports, which NUT/Synology uses for monitoring.
 
 
 Documentation
 =============
 API documentation for this library can be found on `Read the Docs <https://circuitpython-hid-power-device.readthedocs.io/>`_.
-
-For information on building library documentation, please check out
-`this guide <https://learn.adafruit.com/creating-and-sharing-a-circuitpython-library/sharing-our-docs-on-readthedocs#sphinx-5-1>`_.
 
 
 Contributing

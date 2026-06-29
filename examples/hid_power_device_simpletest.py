@@ -22,8 +22,9 @@ at 100% capacity. The host sees a fully-charged UPS on AC.
 import time
 
 from hid_power_device import HIDPowerDevice
+from hid_power_device.reports import PresentStatus, RemainingCapacity
 
-ups = HIDPowerDevice.find()
+ups = HIDPowerDevice.find(PresentStatus, RemainingCapacity)
 
 # Defaults are already sensible (AC present, battery present, 100%,
 # fully charged), so just send immediately to avoid the zero-state bug.

@@ -22,10 +22,25 @@ Example ``boot.py``::
 import usb_hid
 
 
-def _encode_item(tag, value):
-    """Encode a HID short item (tag + minimal-width signed value)."""
-    # HID items are sign-extended, so pick the narrowest width
-    # that preserves the sign of the value.
+def _encode_unsigned(tag, value):
+    """Encode a HID short item with an unsigned value."""
+    if value <= 0xFF:
+        return bytes([tag | 0x01, value])
+    if value <= 0xFFFF:
+        return bytes([tag | 0x02, value & 0xFF, (value >> 8) & 0xFF])
+    return bytes(
+        [
+            tag | 0x03,
+            value & 0xFF,
+            (value >> 8) & 0xFF,
+            (value >> 16) & 0xFF,
+            (value >> 24) & 0xFF,
+        ]
+    )
+
+
+def _encode_signed(tag, value):
+    """Encode a HID short item with a signed value."""
     if -128 <= value <= 127:
         return bytes([tag | 0x01, value & 0xFF])
     if -32768 <= value <= 32767:
@@ -82,11 +97,11 @@ def build_power_device(*report_classes):  # noqa: PLR0912, PLR0915
     d = bytearray()
 
     # Collection preamble
-    d.extend(_encode_item(_USAGE_PAGE, 0x84))
-    d.extend(_encode_item(_USAGE, 0x04))
-    d.extend(_encode_item(_COLLECTION, _COLLECTION_APPLICATION))
-    d.extend(_encode_item(_USAGE, 0x24))  # PowerSummary
-    d.extend(_encode_item(_COLLECTION, _COLLECTION_LOGICAL))
+    d.extend(_encode_unsigned(_USAGE_PAGE, 0x84))
+    d.extend(_encode_unsigned(_USAGE, 0x04))
+    d.extend(_encode_unsigned(_COLLECTION, _COLLECTION_APPLICATION))
+    d.extend(_encode_unsigned(_USAGE, 0x24))  # PowerSummary
+    d.extend(_encode_unsigned(_COLLECTION, _COLLECTION_LOGICAL))
 
     # Initial state
     cur_size = 8
@@ -97,56 +112,56 @@ def build_power_device(*report_classes):  # noqa: PLR0912, PLR0915
     cur_unit = None
     cur_unit_exp = None
 
-    d.extend(_encode_item(_REPORT_SIZE, cur_size))
-    d.extend(_encode_item(_REPORT_COUNT, cur_count))
-    d.extend(_encode_item(_LOGICAL_MIN, cur_min))
-    d.extend(_encode_item(_LOGICAL_MAX, cur_max))
+    d.extend(_encode_unsigned(_REPORT_SIZE, cur_size))
+    d.extend(_encode_unsigned(_REPORT_COUNT, cur_count))
+    d.extend(_encode_signed(_LOGICAL_MIN, cur_min))
+    d.extend(_encode_signed(_LOGICAL_MAX, cur_max))
 
     for rpt in reports:
         if getattr(rpt, "is_bitfield", False):
-            _emit_present_status(d, rpt)
+            _emit_present_status(d, rpt, cur_page)
             continue
 
         if rpt.usage_page != cur_page:
-            d.extend(_encode_item(_USAGE_PAGE, rpt.usage_page))
+            d.extend(_encode_unsigned(_USAGE_PAGE, rpt.usage_page))
             cur_page = rpt.usage_page
 
         if rpt.report_size != cur_size:
-            d.extend(_encode_item(_REPORT_SIZE, rpt.report_size))
+            d.extend(_encode_unsigned(_REPORT_SIZE, rpt.report_size))
             cur_size = rpt.report_size
 
         if rpt.logical_max != cur_max:
-            d.extend(_encode_item(_LOGICAL_MAX, rpt.logical_max))
+            d.extend(_encode_signed(_LOGICAL_MAX, rpt.logical_max))
             cur_max = rpt.logical_max
 
         if rpt.logical_min != cur_min:
-            d.extend(_encode_item(_LOGICAL_MIN, rpt.logical_min))
+            d.extend(_encode_signed(_LOGICAL_MIN, rpt.logical_min))
             cur_min = rpt.logical_min
 
         if rpt.unit != cur_unit:
             if rpt.unit is not None:
-                d.extend(_encode_item(_UNIT, rpt.unit))
+                d.extend(_encode_unsigned(_UNIT, rpt.unit))
             else:
-                d.extend(_encode_item(_UNIT, 0))
+                d.extend(_encode_unsigned(_UNIT, 0))
             cur_unit = rpt.unit
 
         if rpt.unit_exponent != cur_unit_exp:
             if rpt.unit_exponent is not None:
-                d.extend(_encode_item(_UNIT_EXPONENT, rpt.unit_exponent))
+                d.extend(_encode_unsigned(_UNIT_EXPONENT, rpt.unit_exponent))
             else:
-                d.extend(_encode_item(_UNIT_EXPONENT, 0))
+                d.extend(_encode_unsigned(_UNIT_EXPONENT, 0))
             cur_unit_exp = rpt.unit_exponent
 
-        d.extend(_encode_item(_REPORT_ID, rpt.report_id))
-        d.extend(_encode_item(_USAGE, rpt.usage))
+        d.extend(_encode_unsigned(_REPORT_ID, rpt.report_id))
+        d.extend(_encode_unsigned(_USAGE, rpt.usage))
 
         if rpt.string_index is not None:
-            d.extend(_encode_item(_STRING_INDEX, rpt.string_index))
+            d.extend(_encode_unsigned(_STRING_INDEX, rpt.string_index))
 
         if rpt.has_input:
-            d.extend(_encode_item(_INPUT, rpt.input_flags))
-            d.extend(_encode_item(_USAGE, rpt.usage))
-        d.extend(_encode_item(_FEATURE, rpt.feature_flags))
+            d.extend(_encode_unsigned(_INPUT, rpt.input_flags))
+            d.extend(_encode_unsigned(_USAGE, rpt.usage))
+        d.extend(_encode_unsigned(_FEATURE, rpt.feature_flags))
 
     # Close PowerSummary Logical + UPS Application
     d.extend(bytes([_END_COLLECTION]))
@@ -169,29 +184,31 @@ def build_power_device(*report_classes):  # noqa: PLR0912, PLR0915
     )
 
 
-def _emit_present_status(d, rpt):
+def _emit_present_status(d, rpt, cur_page):
     """Emit the PresentStatus nested collection with individual bit fields."""
-    d.extend(_encode_item(_USAGE, rpt.usage))
-    d.extend(_encode_item(_COLLECTION, _COLLECTION_LOGICAL))
-    d.extend(_encode_item(_REPORT_ID, rpt.report_id))
+    if rpt.usage_page != cur_page:
+        d.extend(_encode_unsigned(_USAGE_PAGE, rpt.usage_page))
+    d.extend(_encode_unsigned(_USAGE, rpt.usage))
+    d.extend(_encode_unsigned(_COLLECTION, _COLLECTION_LOGICAL))
+    d.extend(_encode_unsigned(_REPORT_ID, rpt.report_id))
 
-    d.extend(_encode_item(_REPORT_SIZE, 1))
-    d.extend(_encode_item(_LOGICAL_MIN, 0))
-    d.extend(_encode_item(_LOGICAL_MAX, 1))
+    d.extend(_encode_unsigned(_REPORT_SIZE, 1))
+    d.extend(_encode_signed(_LOGICAL_MIN, 0))
+    d.extend(_encode_signed(_LOGICAL_MAX, 1))
 
     cur_page = None
     for page, usage, in_flags, feat_flags in rpt.status_bits:
         if page != cur_page:
-            d.extend(_encode_item(_USAGE_PAGE, page))
+            d.extend(_encode_unsigned(_USAGE_PAGE, page))
             cur_page = page
-        d.extend(_encode_item(_USAGE, usage))
-        d.extend(_encode_item(_INPUT, in_flags))
-        d.extend(_encode_item(_USAGE, usage))
-        d.extend(_encode_item(_FEATURE, feat_flags))
+        d.extend(_encode_unsigned(_USAGE, usage))
+        d.extend(_encode_unsigned(_INPUT, in_flags))
+        d.extend(_encode_unsigned(_USAGE, usage))
+        d.extend(_encode_unsigned(_FEATURE, feat_flags))
 
     # 2 padding bits
-    d.extend(_encode_item(_REPORT_COUNT, 2))
-    d.extend(_encode_item(_INPUT, 0x01))
-    d.extend(_encode_item(_FEATURE, 0x01))
+    d.extend(_encode_unsigned(_REPORT_COUNT, 2))
+    d.extend(_encode_unsigned(_INPUT, 0x01))
+    d.extend(_encode_unsigned(_FEATURE, 0x01))
 
     d.extend(bytes([_END_COLLECTION]))

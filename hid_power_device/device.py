@@ -10,6 +10,8 @@ Runtime API for USB HID Power Devices. Use :class:`HIDPowerDevice` from
 ``code.py`` to set report values and send INPUT reports.
 """
 
+import time
+
 import usb_hid
 
 from .reports import (
@@ -25,32 +27,17 @@ class HIDPowerDevice:  # noqa: PLR0904
     """Runtime interface for a USB HID Power Device.
 
     Sets report values and sends INPUT reports over the interrupt endpoint.
-    Only reports registered in :func:`~hid_power_device.descriptor.build_power_device`
-    are sent.
+    Pass the same report classes used in ``boot.py`` so the device knows
+    which INPUT reports to send.
 
     :param device: A :class:`usb_hid.Device` with ``usage_page=0x84``.
+    :param report_classes: Report classes that were passed to
+        :func:`~hid_power_device.descriptor.build_power_device`.
     """
 
-    _STATUS_BIT_NAMES = (
-        "charging",
-        "discharging",
-        "ac_present",
-        "battery_present",
-        "below_remaining_capacity_limit",
-        "remaining_time_limit_expired",
-        "need_replacement",
-        "voltage_not_regulated",
-        "fully_charged",
-        "fully_discharged",
-        "shutdown_requested",
-        "shutdown_imminent",
-        "communication_lost",
-        "overload",
-    )
-
-    def __init__(self, device):
+    def __init__(self, device, report_classes):
         self._device = device
-        self._active_ids = set(device.report_ids)
+        self._input_ids = tuple(r.report_id for r in report_classes if r.has_input)
 
         self._buf1 = bytearray(1)
         self._buf2 = bytearray(2)
@@ -67,15 +54,16 @@ class HIDPowerDevice:  # noqa: PLR0904
         self.fully_charged = True
 
     @staticmethod
-    def find():
-        """Find the Power Device from :data:`usb_hid.devices`.
+    def find(*report_classes):
+        """Find the Power Device and wrap it with the given report classes.
 
-        :return: A :class:`HIDPowerDevice` wrapping the first device with
-            ``usage_page=0x84`` and ``usage=0x04``.
+        :param report_classes: The same report classes passed to
+            :func:`~hid_power_device.descriptor.build_power_device` in ``boot.py``.
+        :return: A :class:`HIDPowerDevice` instance.
         :raises StopIteration: If no Power Device is registered.
         """
         dev = next(d for d in usb_hid.devices if d.usage_page == 0x84 and d.usage == 0x04)
-        return HIDPowerDevice(dev)
+        return HIDPowerDevice(dev, report_classes)
 
     # -- PresentStatus boolean properties --
 
@@ -273,32 +261,43 @@ class HIDPowerDevice:  # noqa: PLR0904
 
     # -- Send --
 
+    def _send_report(self, buf, rid):
+        for _ in range(3):
+            try:
+                self._device.send_report(buf, rid)
+                return
+            except OSError:
+                time.sleep(0.05)
+        self._device.send_report(buf, rid)
+
     def send(self):
         """Send all active INPUT reports via the interrupt endpoint.
 
         Only reports whose IDs were registered with
         :func:`~hid_power_device.descriptor.build_power_device` are sent.
+        Retries briefly on ``OSError`` (USB busy), which can occur at startup
+        before the host has fully enumerated the device.
         """
-        for rid in self._device.report_ids:
+        for rid in self._input_ids:
             if rid == PresentStatus.report_id:
                 self._buf2[0] = self._present_status & 0xFF
                 self._buf2[1] = (self._present_status >> 8) & 0xFF
-                self._device.send_report(self._buf2, rid)
+                self._send_report(self._buf2, rid)
             elif rid == RemainingCapacity.report_id:
                 self._buf1[0] = self._remaining_capacity & 0xFF
-                self._device.send_report(self._buf1, rid)
+                self._send_report(self._buf1, rid)
             elif rid == RunTimeToEmpty.report_id:
                 self._buf2[0] = self._runtime_to_empty & 0xFF
                 self._buf2[1] = (self._runtime_to_empty >> 8) & 0xFF
-                self._device.send_report(self._buf2, rid)
+                self._send_report(self._buf2, rid)
             elif rid == AverageTimeToEmpty.report_id:
                 self._buf2[0] = self._average_time_to_empty & 0xFF
                 self._buf2[1] = (self._average_time_to_empty >> 8) & 0xFF
-                self._device.send_report(self._buf2, rid)
+                self._send_report(self._buf2, rid)
             elif rid == Voltage.report_id:
                 self._buf2[0] = self._voltage & 0xFF
                 self._buf2[1] = (self._voltage >> 8) & 0xFF
-                self._device.send_report(self._buf2, rid)
+                self._send_report(self._buf2, rid)
 
     # -- Utility --
 

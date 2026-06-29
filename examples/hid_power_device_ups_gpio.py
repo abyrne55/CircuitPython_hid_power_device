@@ -28,6 +28,7 @@ import board
 import digitalio
 
 from hid_power_device import HIDPowerDevice
+from hid_power_device.reports import PresentStatus, RemainingCapacity, RunTimeToEmpty
 
 # -- Configuration --
 GPIO_AC_PIN_1 = board.GP0
@@ -35,7 +36,7 @@ GPIO_AC_PIN_2 = board.GP1
 POLL_INTERVAL_S = 2
 FORCE_SEND_INTERVAL_S = 50
 
-ups = HIDPowerDevice.find()
+ups = HIDPowerDevice.find(PresentStatus, RemainingCapacity, RunTimeToEmpty)
 
 
 def make_input(pin):
