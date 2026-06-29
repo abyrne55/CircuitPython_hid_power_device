@@ -1,0 +1,49 @@
+# SPDX-FileCopyrightText: 2022 Alec Delaney, written for Adafruit Industries
+# SPDX-FileCopyrightText: Copyright (c) 2026 Anthony Byrne
+#
+# SPDX-License-Identifier: GPL-3.0-only
+
+[build-system]
+requires = [
+    "setuptools",
+    "wheel",
+    "setuptools-scm",
+]
+
+[project]
+name = "circuitpython-hid-power-device"
+description = "CircuitPython library for acting like a USB HID Power Device (e.g., UPS, battery system)."
+version = "0.0.0+auto.0"
+readme = "README.rst"
+authors = [
+    {name = "Anthony Byrne", email = "anthony@abyrne.me"}
+]
+urls = {Homepage = "https://github.com/abyrne55/CircuitPython_hid_power_device"}
+keywords = [
+    "adafruit",
+    "blinka",
+    "circuitpython",
+    "micropython",
+    "hid_power_device",
+    "usb",
+    "hid",
+    "pd",
+    "power",
+    "device",
+]
+license = "GPL-3.0-only"
+classifiers = [
+    "Intended Audience :: Developers",
+    "Topic :: Software Development :: Libraries",
+    "Topic :: Software Development :: Embedded Systems",
+    "Topic :: System :: Hardware",
+    "Programming Language :: Python :: 3",
+]
+dynamic = ["dependencies", "optional-dependencies"]
+
+[tool.setuptools]
+packages = ["hid_power_device"]
+
+[tool.setuptools.dynamic]
+dependencies = {file = ["requirements.txt"]}
+optional-dependencies = {optional = {file = ["optional_requirements.txt"]}}
