@@ -18,12 +18,14 @@ Introduction
 
 .. warning::
 
-   **This project is abandoned.** CircuitPython's ``usb_hid`` module has
-   platform limitations that prevent it from working with NUT/Synology: the
-   ``send_report()`` API does not populate the buffers used by GET_REPORT, so
-   the host always reads zeros. There is no Python-level workaround. See
-   ``LESSONS_LEARNED.md`` for a full writeup and recommendations for a C/C++
-   rewrite using TinyUSB directly.
+   **This project is abandoned.** Please see
+   `pico-hid-ups <https://github.com/abyrne55/pico-hid-ups>`_, a C/TinyUSB
+   rewrite that fixes the limitations below.
+
+   CircuitPython's ``usb_hid`` module has platform limitations that prevent it
+   from working with NUT/Synology: the ``send_report()`` API does not populate
+   the buffers used by GET_REPORT, so the host always reads zeros. There is no
+   Python-level workaround. See ``LESSONS_LEARNED.md`` for a full writeup.
 
 CircuitPython library for emulating a USB HID Power Device (UPS / battery
 system). Makes any CircuitPython board appear as a UPS to the connected host
